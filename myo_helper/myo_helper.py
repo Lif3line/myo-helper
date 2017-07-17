@@ -1,0 +1,126 @@
+"""Utility functions for working with Myo Armband Data."""
+
+import os
+import numpy as np
+import scipy.io as sio
+from itertools import combinations, chain
+from sklearn.preprocessing import StandardScaler
+
+
+def import_subj(folder_path, subject):
+    """Get data from Myo experiment for v1 testing."""
+    file_name = "s{}.mat".format(subject)
+    file_path = os.path.join(folder_path, file_name)
+
+    data = sio.loadmat(file_path)
+
+    data['move'] = np.squeeze(data['move'])
+    data['rep'] = np.squeeze(data['rep'])
+    data['emg_time'] = np.squeeze(data['emg_time'])
+
+    return data
+
+
+def gen_split_balanced(rep_ids, nb_test, base=None):
+    """Create a balanced split for training and testing based on repetitions (all reps equally tested + trained on) .
+
+    Args:
+        rep_ids (array): Repetition identifiers to split
+        nb_test (int): The number of repetitions to be used for testing in each each split
+        base (array, optional): A specific test set to use (must be of length nb_test)
+
+    Returns:
+        Arrays: Training repetitions and corresponding test repetitions as 2D arrays [[set 1], [set 2] ..]
+    """
+    nb_reps = rep_ids.shape[0]
+    nb_splits = nb_reps
+
+    train_reps = np.zeros((nb_splits, nb_reps - nb_test,), dtype=int)
+    test_reps = np.zeros((nb_splits, nb_test), dtype=int)
+
+    # Generate all possible combinations
+    all_combos = combinations(rep_ids, nb_test)
+    all_combos = np.fromiter(chain.from_iterable(all_combos), int)
+    all_combos = all_combos.reshape(-1, nb_test)
+
+    if base is not None:
+        test_reps[0, :] = base
+        all_combos = np.delete(all_combos, np.where(np.all(all_combos == base, axis=1))[0][0], axis=0)
+        cur_split = 1
+    else:
+        cur_split = 0
+
+    all_combos_copy = all_combos
+    reset_counter = 0
+    while cur_split < (nb_splits):
+        if reset_counter >= 10 or all_combos.shape[0] == 0:
+            all_combos = all_combos_copy
+            test_reps = np.zeros((nb_splits, nb_test), dtype=int)
+            if base is not None:
+                test_reps[0, :] = base
+                cur_split = 1
+            else:
+                cur_split = 0
+
+            reset_counter = 0
+
+        randomIndex = np.random.randint(0, all_combos.shape[0])
+        test_reps[cur_split, :] = all_combos[randomIndex, :]
+        all_combos = np.delete(all_combos, randomIndex, axis=0)
+
+        _, counts = np.unique(test_reps[:cur_split + 1], return_counts=True)
+
+        if max(counts) > nb_test:
+            test_reps[cur_split, :] = np.zeros((1, nb_test), dtype=int)
+            reset_counter += 1
+            continue
+        else:
+            cur_split += 1
+            reset_counter = 0
+
+    for i in range(nb_splits):
+        train_reps[i, :] = np.setdiff1d(rep_ids, test_reps[i, :])
+
+    return train_reps, test_reps
+
+
+def normalise_by_rep(emg, rep, train_reps):
+    """Preprocess train+test data to mean 0, std 1 based on training data only."""
+    # Locate valid window end indices (window must be window_len long and window_inc away from last)
+    train_idx = np.where(np.in1d(rep, train_reps))
+
+    scaler = StandardScaler(with_mean=True,
+                            with_std=True,
+                            copy=False).fit(emg[train_idx])
+
+    return scaler.transform(emg)
+
+
+def window_emg(window_len, window_inc, emg, move, rep, which_moves=None, which_reps=None,
+               emg_dtype=np.float32, y_dtype=np.int8, r_dtype=np.int8):
+    """Window the EMG data explicitly."""
+    nb_obs = emg.shape[0]
+    nb_channels = emg.shape[1]
+
+    # Locate valid window end indices (window must be window_len long and window_inc away from last)
+    targets = np.array(range(window_len - 1, nb_obs, window_inc))
+
+    # Reduce targets by allowed movements
+    if which_moves is not None:
+        targets = targets[np.in1d(move[targets], which_moves)]
+
+    # Reduce targets by allowed repetitions
+    if which_reps is not None:
+        targets = targets[np.in1d(rep[targets], which_reps)]
+
+    x_data = np.zeros([targets.shape[0], window_len, nb_channels, 1], dtype=emg_dtype)
+    y_data = np.zeros([targets.shape[0], ], dtype=y_dtype)
+    r_data = np.zeros([targets.shape[0], ], dtype=r_dtype)
+
+    for i, win_end in enumerate(targets):
+        win_start = win_end - (window_len - 1)
+        x_data[i, :, :, 0] = emg[win_start:win_end + 1, :]  # Include end
+        y_data[i] = move[win_end]
+        r_data[i] = rep[win_end]
+
+    return x_data, y_data, r_data
