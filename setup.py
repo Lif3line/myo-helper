@@ -16,4 +16,4 @@ setup(name='myo_helper',
           'sklearn',
           'numpy'
       ],
-      keywords='ninapro emg')
+      keywords='myo emg')
