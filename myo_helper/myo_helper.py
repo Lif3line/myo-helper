@@ -1,6 +1,8 @@
 """Utility functions for working with Myo Armband Data."""
 
 import os
+import errno
+import pickle
 import numpy as np
 import scipy.io as sio
 from itertools import combinations, chain
@@ -124,3 +126,18 @@ def window_emg(window_len, window_inc, emg, move, rep, which_moves=None, which_r
         r_data[i] = rep[win_end]
 
     return x_data, y_data, r_data
+
+
+def save_object(obj, filename):
+    """Simple function for saving an object with pickle to a file. Create dir + file if neccessary."""
+    filename = os.path.normpath(filename)
+
+    if not os.path.exists(os.path.dirname(filename)):
+        try:
+            os.makedirs(os.path.dirname(filename))
+        except OSError as exc:  # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
+
+    with open(filename, 'wb+') as output:
+        pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
