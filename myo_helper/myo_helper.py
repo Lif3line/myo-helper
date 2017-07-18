@@ -9,9 +9,9 @@ from itertools import combinations, chain
 from sklearn.preprocessing import StandardScaler
 
 
-def import_subj(folder_path, subject):
+def import_subj(folder_path, subject, expt=1):
     """Get data from Myo experiment for v1 testing."""
-    file_name = "s{}.mat".format(subject)
+    file_name = "s{}_ex{}.mat".format(subject, expt)
     file_path = os.path.join(folder_path, file_name)
 
     data = sio.loadmat(file_path)
