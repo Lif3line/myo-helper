@@ -9,9 +9,14 @@ from itertools import combinations, chain
 from sklearn.preprocessing import StandardScaler
 
 
-def import_subj(folder_path, subject, expt=1):
+def import_subj(folder_path, subject, expts=1):
     """Get data from Myo experiment for v1 testing."""
-    file_name = "s{}_ex{}.mat".format(subject, expt)
+    nb_expts = np.size(expts)
+    if nb_expts < 1:
+        raise ValueError("Experiment ID(s) argument, 'expts', must have atleast 1 value.")
+
+    expts = np.asarray(expts)  # In case scalar
+    file_name = "s{}_ex{}.mat".format(subject, expts.item(0))
     file_path = os.path.join(folder_path, file_name)
 
     data = sio.loadmat(file_path)
@@ -19,6 +24,26 @@ def import_subj(folder_path, subject, expt=1):
     data['move'] = np.squeeze(data['move'])
     data['rep'] = np.squeeze(data['rep'])
     data['emg_time'] = np.squeeze(data['emg_time'])
+
+    if nb_expts > 1:
+        for expt in expts[1:]:
+            file_name = "s{}_ex{}.mat".format(subject, expt)
+            file_path = os.path.join(folder_path, file_name)
+
+            data_tmp = sio.loadmat(file_path)
+
+            # Label experiments as later repetitions
+            cur_max_rep = np.max(data['rep'])
+            data_tmp['rep'][data_tmp['rep'] != -1] += cur_max_rep
+
+            data['move'] = np.concatenate((data['move'], np.squeeze(data_tmp['move'])))
+            data['rep'] = np.concatenate((data['rep'], np.squeeze(data_tmp['rep'])))
+            data['emg_time'] = np.concatenate((data['emg_time'], np.squeeze(data_tmp['emg_time'])))
+
+            data['emg'] = np.concatenate((data['emg'], data_tmp['emg']))
+            data['gyro'] = np.concatenate((data['gyro'], data_tmp['gyro']))
+            data['orient'] = np.concatenate((data['orient'], data_tmp['orient']))
+            data['acc'] = np.concatenate((data['acc'], data_tmp['acc']))
 
     return data
 
