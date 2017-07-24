@@ -120,7 +120,7 @@ def normalise_by_rep(emg, rep, train_reps):
                             with_std=True,
                             copy=False).fit(emg[train_idx])
 
-    return scaler.transform(emg)
+    return scaler.transform(emg), scaler
 
 
 def window_emg(window_len, window_inc, emg, move, rep, which_moves=None, which_reps=None,
