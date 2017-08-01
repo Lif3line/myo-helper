@@ -125,7 +125,11 @@ def normalise_by_rep(emg, rep, train_reps):
 
 def window_emg(window_len, window_inc, emg, move, rep, which_moves=None, which_reps=None,
                emg_dtype=np.float32, y_dtype=np.int8, r_dtype=np.int8):
-    """Window the EMG data explicitly."""
+    """Window the EMG data explicitly.
+
+    If using which_moves then y_data will be indices into which_moves rather than the original movement label; this is
+    to fix issues in some machine learning libraries such as Tensorflow which have issues using sparse categorical
+    cross-entropy and non-sequential labels."""
     nb_obs = emg.shape[0]
     nb_channels = emg.shape[1]
 
@@ -149,6 +153,11 @@ def window_emg(window_len, window_inc, emg, move, rep, which_moves=None, which_r
         x_data[i, :, :, 0] = emg[win_start:win_end + 1, :]  # Include end
         y_data[i] = move[win_end]
         r_data[i] = rep[win_end]
+
+    if which_moves is not None:
+        y_data_tmp = np.copy(y_data)
+        for i, label in enumerate(which_moves):
+            y_data[np.where(y_data_tmp == label)] = i
 
     return x_data, y_data, r_data
 
