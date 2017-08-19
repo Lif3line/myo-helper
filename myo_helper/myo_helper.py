@@ -48,6 +48,42 @@ def import_subj(folder_path, subject, expts=1):
     return data
 
 
+def import_subj_delsys(folder_path, subject, expts=1):
+    """Get data from Myo experiment for v1 testing."""
+    nb_expts = np.size(expts)
+    if nb_expts < 1:
+        raise ValueError("Experiment ID(s) argument, 'expts', must have atleast 1 value.")
+
+    expts = np.asarray(expts)  # In case scalar
+    file_name = "s{}_ex{}_delsys.mat".format(subject, expts.item(0))
+    file_path = os.path.join(folder_path, file_name)
+
+    data = sio.loadmat(file_path)
+
+    data['move'] = np.squeeze(data['move'])
+    data['rep'] = np.squeeze(data['rep'])
+    data['emg_time'] = np.squeeze(data['emg_time'])
+
+    if nb_expts > 1:
+        for expt in expts[1:]:
+            file_name = "s{}_ex{}_delsys.mat".format(subject, expt)
+            file_path = os.path.join(folder_path, file_name)
+
+            data_tmp = sio.loadmat(file_path)
+
+            # Label experiments as later repetitions
+            cur_max_rep = np.max(data['rep'])
+            data_tmp['rep'][data_tmp['rep'] != -1] += cur_max_rep
+
+            data['move'] = np.concatenate((data['move'], np.squeeze(data_tmp['move'])))
+            data['rep'] = np.concatenate((data['rep'], np.squeeze(data_tmp['rep'])))
+            data['emg_time'] = np.concatenate((data['emg_time'], np.squeeze(data_tmp['emg_time'])))
+
+            data['acc'] = np.concatenate((data['acc'], data_tmp['acc']))
+
+    return data
+
+
 def gen_split_balanced(rep_ids, nb_test, base=None):
     """Create a balanced split for training and testing based on repetitions (all reps equally tested + trained on) .
 
