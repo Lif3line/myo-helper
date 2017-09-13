@@ -147,6 +147,95 @@ def gen_split_balanced(rep_ids, nb_test, base=None):
     return train_reps, test_reps
 
 
+def gen_ttv_balanced(rep_ids, nb_test, nb_val, base=None):
+    """Create a balanced split for training, testing and validation based on repetitions.
+
+    Args:
+        rep_ids (array): Repetition identifiers to split
+        nb_test (int): The number of repetitions to be used for testing in each each split
+        base (array, optional): A specific test set to use (must be of length nb_test)
+
+    Returns:
+        Arrays: Training repetitions and corresponding test repetitions as 2D arrays [[set 1], [set 2] ..]
+    """
+    nb_reps = rep_ids.shape[0]
+    nb_splits = nb_reps
+
+    train_val_pool_reps = np.zeros((nb_splits, nb_reps - nb_test,), dtype=int)
+    train_reps = np.zeros((nb_splits, nb_reps - nb_test - nb_val,), dtype=int)
+    test_reps = np.zeros((nb_splits, nb_test), dtype=int)
+    val_reps = np.zeros((nb_splits, nb_val), dtype=int)
+
+    # Select test combinations
+    all_combos = combinations(rep_ids, nb_test)
+    all_combos = np.fromiter(chain.from_iterable(all_combos), int)
+    all_combos = all_combos.reshape(-1, nb_test)
+
+    if base is not None:
+        test_reps[0, :] = base
+        all_combos = np.delete(all_combos, np.where(np.all(all_combos == base, axis=1))[0][0], axis=0)
+        cur_split = 1
+    else:
+        cur_split = 0
+
+    all_combos_copy = all_combos
+    reset_counter = 0
+    while cur_split < (nb_splits):
+        if reset_counter >= 10 or all_combos.shape[0] == 0:
+            all_combos = all_combos_copy
+            test_reps = np.zeros((nb_splits, nb_test), dtype=int)
+            if base is not None:
+                test_reps[0, :] = base
+                cur_split = 1
+            else:
+                cur_split = 0
+
+            reset_counter = 0
+
+        randomIndex = np.random.randint(0, all_combos.shape[0])
+        test_reps[cur_split, :] = all_combos[randomIndex, :]
+        all_combos = np.delete(all_combos, randomIndex, axis=0)
+
+        _, counts = np.unique(test_reps[:cur_split + 1], return_counts=True)
+
+        if max(counts) > nb_test:
+            test_reps[cur_split, :] = np.zeros((1, nb_test), dtype=int)
+            reset_counter += 1
+            continue
+        else:
+            cur_split += 1
+            reset_counter = 0
+
+    for i in range(nb_splits):
+        train_val_pool_reps[i, :] = np.setdiff1d(rep_ids, test_reps[i, :])
+
+    # Select Validation Combinations
+    cur_split = 0
+    reset_counter = 0
+    while cur_split < nb_splits:
+        if reset_counter >= 10:
+            val_reps = np.zeros((nb_splits, nb_val), dtype=int)
+            reset_counter = 0
+            cur_split = 0
+
+        val_reps[cur_split, :] = np.random.permutation(train_val_pool_reps[cur_split, :])[:nb_val]
+
+        _, counts = np.unique(val_reps[:cur_split + 1], return_counts=True)
+
+        if max(counts) > nb_val:
+            val_reps[cur_split, :] = np.zeros((1, nb_val), dtype=int)
+            reset_counter += 1
+            continue
+        else:
+            cur_split += 1
+            reset_counter = 0
+
+    for i in range(nb_splits):
+        train_reps[i, :] = np.setdiff1d(train_val_pool_reps[i, :], val_reps[i, :])
+
+    return train_reps, test_reps, val_reps
+
+
 def normalise_by_rep(emg, rep, train_reps):
     """Preprocess train+test data to mean 0, std 1 based on training data only."""
     # Locate valid window end indices (window must be window_len long and window_inc away from last)
