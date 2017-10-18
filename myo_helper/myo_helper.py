@@ -9,7 +9,7 @@ from itertools import combinations, chain
 from sklearn.preprocessing import StandardScaler
 
 
-def import_subj(folder_path, subject, expts=1):
+def import_subj_myo(folder_path, subject, expts=1):
     """Get data from Myo experiment for v1 testing."""
     nb_expts = np.size(expts)
     if nb_expts < 1:
@@ -84,6 +84,17 @@ def import_subj_delsys(folder_path, subject, expts=1):
     return data
 
 
+def import_supplemental(file_path):
+    """Get data from a supplemental file"""
+    data = sio.loadmat(file_path)
+
+    data['move'] = np.squeeze(data['move'])
+    data['rep'] = np.squeeze(data['rep'])
+    data['emg_time'] = np.squeeze(data['emg_time'])
+
+    return data
+
+
 def gen_split_balanced(rep_ids, nb_test, base=None):
     """Create a balanced split for training and testing based on repetitions (all reps equally tested + trained on) .
 
@@ -147,19 +158,25 @@ def gen_split_balanced(rep_ids, nb_test, base=None):
     return train_reps, test_reps
 
 
-def gen_ttv_balanced(rep_ids, nb_test, nb_val, base=None):
+def gen_ttv_balanced(rep_ids, nb_test, nb_val, split_multiplier=1, base=None):
     """Create a balanced split for training, testing and validation based on repetitions.
 
     Args:
         rep_ids (array): Repetition identifiers to split
         nb_test (int): The number of repetitions to be used for testing in each each split
+        nb_val (int): The number of repetitions to be used for validation in each each split
+        split_multiplier (int, optional): Multiplier for the number of splits generated
         base (array, optional): A specific test set to use (must be of length nb_test)
 
     Returns:
         Arrays: Training repetitions and corresponding test repetitions as 2D arrays [[set 1], [set 2] ..]
+
+    Notes:
+        Somewhat inelegant - will run forever if split_multiplier too high of if there is no solution, may also simply
+        be slow
     """
     nb_reps = rep_ids.shape[0]
-    nb_splits = nb_reps
+    nb_splits = nb_reps * split_multiplier
 
     train_val_pool_reps = np.zeros((nb_splits, nb_reps - nb_test,), dtype=int)
     train_reps = np.zeros((nb_splits, nb_reps - nb_test - nb_val,), dtype=int)
@@ -197,8 +214,7 @@ def gen_ttv_balanced(rep_ids, nb_test, nb_val, base=None):
         all_combos = np.delete(all_combos, randomIndex, axis=0)
 
         _, counts = np.unique(test_reps[:cur_split + 1], return_counts=True)
-
-        if max(counts) > nb_test:
+        if max(counts) > nb_test * split_multiplier:
             test_reps[cur_split, :] = np.zeros((1, nb_test), dtype=int)
             reset_counter += 1
             continue
@@ -222,7 +238,7 @@ def gen_ttv_balanced(rep_ids, nb_test, nb_val, base=None):
 
         _, counts = np.unique(val_reps[:cur_split + 1], return_counts=True)
 
-        if max(counts) > nb_val:
+        if max(counts) > nb_val * split_multiplier:
             val_reps[cur_split, :] = np.zeros((1, nb_val), dtype=int)
             reset_counter += 1
             continue
